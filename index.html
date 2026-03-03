@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>iPhone 標籤掃描器</title>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <style>
+        body { font-family: -apple-system, sans-serif; padding: 20px; background-color: #f4f4f9; max-width: 500px; margin: auto; }
+        .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        button { width: 100%; background-color: #007AFF; color: white; border: none; padding: 12px; border-radius: 8px; font-size: 16px; cursor: pointer; margin-top: 10px; }
+        .result-box { margin-top: 10px; padding: 10px; background: #e9e9eb; border-radius: 6px; font-family: monospace; font-size: 0.9rem; white-space: pre-wrap; }
+        .status { font-size: 0.8rem; color: #007AFF; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h3>1. 拍攝編號標籤</h3>
+        <input type="file" id="input-id" accept="image/*" capture="environment" style="display:none">
+        <button onclick="document.getElementById('input-id').click()">拍照提取編號</button>
+        <p class="status" id="status-id"></p>
+        <div class="result-box" id="res-id">編號: 尚未提取</div>
+    </div>
+
+    <div class="card">
+        <h3>2. 拍攝手機標籤</h3>
+        <input type="file" id="input-spec" accept="image/*" capture="environment" style="display:none">
+        <button onclick="document.getElementById('input-spec').click()">拍照提取規格</button>
+        <p class="status" id="status-spec"></p>
+        <div class="result-box" id="res-spec">品名 / SN / IMEI: 尚未提取</div>
+    </div>
+
+    <button id="send-btn" style="background-color: #34c759;" disabled>傳送資料至 Google 表格</button>
+
+    <script>
+        let finalData = { id: "", model: "", sn: "", imei: "" };
+
+        async function doOCR(file, type) {
+            const status = document.getElementById(`status-${type}`);
+            const result = document.getElementById(`res-${type}`);
+            status.innerText = "辨識中...請保持網路通暢";
+
+            const worker = await Tesseract.createWorker('eng');
+            const { data: { text } } = await worker.recognize(file);
+            await worker.terminate();
+
+            if (type === 'id') {
+                const idMatch = text.replace(/\s/g, '').match(/\d{11}/);
+                finalData.id = idMatch ? idMatch[0] : "未偵測";
+                result.innerText = `編號: ${finalData.id}`;
+            } else {
+                const snMatch = text.match(/SN\s*:\s*([A-Z0-9]+)/i);
+                const imeiMatch = text.match(/IMEI\s*:\s*(\d{15})/);
+                // 簡易匹配 iPhone 字樣
+                const modelMatch = text.match(/iPhone\s*[^\n]*/i);
+                
+                finalData.model = modelMatch ? modelMatch[0].trim() : "未偵測";
+                finalData.sn = snMatch ? snMatch[1] : "未偵測";
+                finalData.imei = imeiMatch ? imeiMatch[1] : "未偵測";
+                
+                result.innerText = `品名: ${finalData.model}\nSN: ${finalData.sn}\nIMEI: ${finalData.imei}`;
+            }
+            status.innerText = "辨識完成 ✅";
+            checkData();
+        }
+
+        function checkData() {
+            if (finalData.id && finalData.sn) {
+                document.getElementById('send-btn').disabled = false;
+            }
+        }
+
+        document.getElementById('input-id').onchange = e => doOCR(e.target.files[0], 'id');
+        document.getElementById('input-spec').onchange = e => doOCR(e.target.files[0], 'spec');
+    </script>
+</body>
+</html>
